@@ -1,17 +1,26 @@
 package scheduler
 
 import (
-	"fmt"
 	"math/rand"
 	"net/url"
 	"os"
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/irfanhabib/mzc/fetcher"
 	"github.com/irfanhabib/mzc/sitemap"
 )
 
+// Scheduler interface for Scheduler
+type Scheduler interface {
+	Run()
+	Completed() chan bool
+}
+
+// BasicScheduler  basic implementation of a scheduler that orchestrates crawling
+// It will randomly send links to crawl to a finite set of workers
 type BasicScheduler struct {
 	workersCount  int
 	workers       []fetcher.Fetcher
@@ -21,97 +30,105 @@ type BasicScheduler struct {
 	siteMap       sitemap.SiteMap
 	submittedJobs int
 	rand          *rand.Rand
-	Completed     chan bool
+	completed     chan bool
 	domain        string
 }
 
-func New(mainChannel chan string, siteMap sitemap.SiteMap, crawlUrl string) *BasicScheduler {
+// New instiates a new Scheduler instance
+func New(mainChannel chan string, siteMap sitemap.SiteMap, crawlURL string, workerCount int) Scheduler {
 
-	urlStruct, err := url.Parse(crawlUrl)
+	urlStruct, err := url.Parse(crawlURL)
 	if err != nil {
 		os.Exit(-1)
 	}
 	return &BasicScheduler{
-		workersCount: 10,
+		workersCount: workerCount,
 		mainChannel:  mainChannel,
 		siteMap:      siteMap,
-		Completed:    make(chan bool),
+		completed:    make(chan bool),
 		domain:       urlStruct.Host,
 	}
 }
 
-func (this *BasicScheduler) init() {
-	this.workers = make([]fetcher.Fetcher, 10)
-	for i := 0; i < this.workersCount; i++ {
-		this.workers[i] = fetcher.New(this.domain, make(chan string, 10), make(chan *fetcher.URLMap, 10))
-		go this.workers[i].Run()
+// Completed returns the completed channel to
+//indicate that the scheduler is done crawling
+func (sched *BasicScheduler) Completed() chan bool {
+	return sched.completed
+}
+func (sched *BasicScheduler) init() {
+	sched.workers = make([]fetcher.Fetcher, sched.workersCount)
+	for i := 0; i < sched.workersCount; i++ {
+		sched.workers[i] = fetcher.New(sched.domain, make(chan string, 10), make(chan *fetcher.URLMap, 10))
+		go sched.workers[i].Run()
 	}
 
-	this.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	sched.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 }
 
-func (this *BasicScheduler) getWorker() fetcher.Fetcher {
-	val := int(this.rand.Float64() * 10)
-	return this.workers[val]
+func (sched *BasicScheduler) getWorker() fetcher.Fetcher {
+	val := int(sched.rand.Float64() * float64(sched.workersCount))
+	return sched.workers[val]
 }
-func (this *BasicScheduler) Run() {
 
-	// Setup 10 workers
-	this.init()
+// Run main method that initialises workers and starts the crawling process
+func (sched *BasicScheduler) Run() {
 
-	// submit units of work
-	// go this.submitLinks()
+	// Setup workers
+	sched.init()
 
-	for i := 0; i < this.workersCount; i++ {
-		go this.analyseLinksForWorker(i)
+	// Instantiate go routing for each worker to
+	// receive the crawled link and resubmit child links to other workers
+	for i := 0; i < sched.workersCount; i++ {
+		go sched.resubmitWorkToWorkers(i)
 	}
 
-	url := <-this.mainChannel
-	this.getWorker().InputChannel() <- url
+	url := <-sched.mainChannel
+	sched.getWorker().InputChannel() <- url
 
+	// gorouting to monitor worker idleness,
+	// once all workers are idle no more crawling is taking place
 	go func() {
 		for {
 			time.Sleep(500 * time.Millisecond)
-			// monitor worker idleness
 			systemIdle := true
 			for i := 0; i < 10; i++ {
-				systemIdle = systemIdle && this.workers[i].Idle()
+				systemIdle = systemIdle && sched.workers[i].Idle()
 				if !systemIdle {
 					break
 				}
 			}
 			if systemIdle == true {
-				this.Completed <- true
+				sched.completed <- true
 			}
 		}
 	}()
 }
 
-func (this *BasicScheduler) analyseLinksForWorker(index int) {
+func (sched *BasicScheduler) resubmitWorkToWorkers(index int) {
 
 	for {
-		links := <-this.workers[index].OutputChannel()
+		links := <-sched.workers[index].OutputChannel()
 
 		// Filter out visited Links
 		tmpLinks := links.Links
-		newLinks := make([]string, len(tmpLinks))
+		newLinks := make([]*url.URL, len(tmpLinks))
 		idx := 0
 		for _, childLink := range tmpLinks {
-			urlObj, _ := url.Parse(childLink)
-			_, ok := this.visitedLinks.Load(urlObj.String())
+			_, ok := sched.visitedLinks.Load(childLink.String())
 			if !ok {
-				newLinks[idx] = urlObj.String()
+				newLinks[idx] = childLink
 				idx++
 			}
 		}
 		links.Links = newLinks[0:idx]
-		this.siteMap.InputChannel() <- links
+
+		sched.siteMap.InputChannel() <- links
 		go func() {
 			for _, urlStr := range links.Links {
-				this.visitedLinks.Store(urlStr, true)
-				this.getWorker().InputChannel() <- urlStr
-				fmt.Printf("Saved URL %s\n", urlStr)
+				sched.visitedLinks.Store(urlStr.String(), true)
+				sched.getWorker().InputChannel() <- urlStr.String()
+				log.Debugf("Crawled URL %s\n", urlStr.String())
 			}
 		}()
 	}

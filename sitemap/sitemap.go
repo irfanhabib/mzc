@@ -1,8 +1,14 @@
 package sitemap
 
 import (
+	"bufio"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
+	"sync"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/irfanhabib/mzc/fetcher"
 )
@@ -10,122 +16,90 @@ import (
 type SiteMap interface {
 	Run()
 	InputChannel() chan *fetcher.URLMap
-	Print() string
+	Print()
 }
 
-type SiteMapImpl struct {
-	inputChannel chan *fetcher.URLMap
-	root         *SiteMapTreeNode
-	stash        map[string]*fetcher.URLMap
-}
-type SiteMapTreeNode struct {
-	url      string
-	children []*SiteMapTreeNode
+type MapSiteMapImpl struct {
+	inputChannel      chan *fetcher.URLMap
+	rootUrl           string
+	linksMap          sync.Map
+	siteMapFileWriter *bufio.Writer
+	outputFileName    string
 }
 
-func (this *SiteMapImpl) InputChannel() chan *fetcher.URLMap {
+func New(inputChannel chan *fetcher.URLMap, rootUrl string, outputFileName string) SiteMap {
+	return &MapSiteMapImpl{inputChannel: inputChannel, rootUrl: rootUrl, outputFileName: outputFileName}
+}
+
+func (this *MapSiteMapImpl) Run() {
+
+	f, err := os.OpenFile(this.outputFileName, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	this.siteMapFileWriter = bufio.NewWriter(f)
+
+	for {
+		link := <-this.inputChannel
+		this.linksMap.LoadOrStore(link.URL, link)
+	}
+}
+
+func (this *MapSiteMapImpl) InputChannel() chan *fetcher.URLMap {
 	return this.inputChannel
 }
 
-// func New(inputChannel chan *fetcher.URLMap) SiteMap {
-// 	return &SiteMapImpl{inputChannel: inputChannel, stash: make(map[string]*fetcher.URLMap)}
-// }
+func (this *MapSiteMapImpl) Print() {
 
-func (this *SiteMapImpl) Print() string {
-
-	this.mergeStash()
-	return this._Print(this.root, 0, make(map[string]bool))
-}
-
-func (this *SiteMapImpl) mergeStash() {
-
-	for link, linkMap := range this.stash {
-		node := this.findNode(this.root, link)
-
-		if node == nil {
-			fmt.Printf("trouble")
-			continue
-		}
-		children := make([]*SiteMapTreeNode, len(linkMap.Links))
-		for i, childUrl := range linkMap.Links {
-			children[i] = &SiteMapTreeNode{url: childUrl}
-		}
-		node.children = children
-
+	node, ok := this.linksMap.Load(this.rootUrl)
+	if !ok {
+		log.Error("Unable to load root URL. This means scheduler failed to craw")
+		os.Exit(-1)
 	}
 
+	str := this._Print(node.(*fetcher.URLMap), 0, make(map[string]bool))
+	this.siteMapFileWriter.WriteString(str)
+	this.siteMapFileWriter.Flush()
+
 }
 
-func (this *SiteMapTreeNode) String() string {
-	return this.url
-}
-func (this *SiteMapImpl) _Print(node *SiteMapTreeNode, level int, seenLinks map[string]bool) string {
+func (this *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[string]bool) string {
 
-	str := ""
-	if node != nil {
+	nodeString := fmt.Sprintf("%s\n", node.URL)
+	log.Debugf("Processing URL: %s\n", node.URL)
 
-		_, ok := seenLinks[node.url]
-		if !ok {
-			str = fmt.Sprintf("%s%s\n", str, node.url)
-			seenLinks[node.url] = true
-			childStr := ""
-			for _, k := range node.children {
-				tab := strings.Repeat("\t", level)
-
-				subChildStr := this._Print(k, level+1, seenLinks)
-				if childStr == "" && subChildStr == "" {
-					continue
-				}
-				childStr = fmt.Sprintf("%s%s%s\n", childStr, tab, subChildStr)
+	for _, childUrl := range node.Links {
+		baseSep := strings.Repeat("\t", level+1)
+		if _, ok := seenLinks[childUrl.String()]; ok {
+			// Don't recurse
+			continue
+		}
+		childNode, ok := this.linksMap.Load(childUrl.String())
+		if ok {
+			// Add all current level children to seen links
+			ignoreURLMap := make(map[string]bool)
+			for _, childURI := range node.Links {
+				ignoreURLMap[childURI.String()] = true
+				ignoreURLMap[fmt.Sprintf("%s/", childURI.String())] = true
 			}
-			str = fmt.Sprintf("%s%s", str, childStr)
-		}
-	}
-	return str
-}
-func (this *SiteMapImpl) Run() {
-	for {
-		node := this.root
+			ignoreURLMap[getURL(node.URL)] = true
+			ignoreURLMap[fmt.Sprintf("%s/", getURL(node.URL))] = true
 
-		links := <-this.inputChannel
-		if node == nil {
-			this.root = &SiteMapTreeNode{url: links.URL}
-			node = this.root
+			for k, v := range seenLinks {
+				ignoreURLMap[k] = v
+			}
+			nodeString = fmt.Sprintf("%s%s%s\n", nodeString, baseSep, this._Print(childNode.(*fetcher.URLMap), level+1, ignoreURLMap))
 		} else {
-			node = this.findNode(this.root, links.URL)
+			// Leaf node
+			nodeString = fmt.Sprintf("%s%s%s\n", nodeString, baseSep, childUrl)
 		}
-		if node == nil {
-			// Parent node hasnt been added yet, store in stash
-			this.stash[links.URL] = links
-			continue
-		}
-		children := make([]*SiteMapTreeNode, len(links.Links))
-		for i, childUrl := range links.Links {
-			children[i] = &SiteMapTreeNode{url: childUrl}
-		}
-		node.children = children
-
 	}
+	return nodeString
 }
 
-func (this *SiteMapImpl) findNode(node *SiteMapTreeNode, url string) *SiteMapTreeNode {
-
-	if node == nil {
-		return nil
-	}
-
-	if node.url == url {
-		return node
-	}
-
-	if node.children == nil {
-		return nil
-	}
-	for _, k := range node.children {
-		ret := this.findNode(k, url)
-		if ret != nil {
-			return ret
-		}
-	}
-	return nil
+func getURL(stringURL string) string {
+	URL, _ := url.Parse(stringURL)
+	return URL.String()
 }
