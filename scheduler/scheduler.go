@@ -32,6 +32,7 @@ type BasicScheduler struct {
 	rand          *rand.Rand
 	completed     chan bool
 	domain        string
+	scheme        string
 }
 
 // New instiates a new Scheduler instance
@@ -47,6 +48,7 @@ func New(mainChannel chan string, siteMap sitemap.SiteMap, crawlURL string, work
 		siteMap:      siteMap,
 		completed:    make(chan bool),
 		domain:       urlStruct.Host,
+		scheme:       urlStruct.Scheme,
 	}
 }
 
@@ -63,6 +65,21 @@ func (sched *BasicScheduler) init() {
 	}
 
 	sched.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Fetch robots.txt
+	// robotsUrl := fmt.Sprintf("%s://%s/robots.txt", sched.scheme, sched.domain)
+	// response, err := http.Get(robotsUrl)
+	// if err != nil {
+	// 	log.Errorf("Failed to fetched robots.txt from %s due to %+v. Will ignore this and disable handling of robots.txt", robotsUrl, err)
+	// 	// Skip robots.txt handling in case of error
+	// } else {
+	// 	defer response.Body.Close()
+	// 	links, err := f.findLinks(response, url)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	return links, nil
+	// }
 
 }
 
@@ -92,7 +109,7 @@ func (sched *BasicScheduler) Run() {
 		for {
 			time.Sleep(500 * time.Millisecond)
 			systemIdle := true
-			for i := 0; i < 10; i++ {
+			for i := 0; i < sched.workersCount; i++ {
 				systemIdle = systemIdle && sched.workers[i].Idle()
 				if !systemIdle {
 					break

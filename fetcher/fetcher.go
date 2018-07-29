@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 )
@@ -29,6 +30,7 @@ type BasicFetcher struct {
 	inputChannel  chan string
 	outputChannel chan *URLMap
 	idle          bool
+	idleMutex     sync.RWMutex
 }
 
 // New instantiates a worker
@@ -44,12 +46,22 @@ func New(baseDomain string, inputChannel chan string, outputChannel chan *URLMap
 // Idle returns the current `idle` value
 // A worker is idle if its waiting for work
 func (f *BasicFetcher) Idle() bool {
-	return f.idle
+
+	f.idleMutex.RLock()
+	isIdle := f.idle
+	f.idleMutex.RUnlock()
+	return isIdle
 }
 
 // InputChannel channel where the worker receives links to crawl
 func (f *BasicFetcher) InputChannel() chan string {
 	return f.inputChannel
+}
+
+func (f *BasicFetcher) setIdle(idle bool) {
+	f.idleMutex.Lock()
+	f.idle = idle
+	f.idleMutex.Unlock()
 }
 
 // OutputChannel channel where the worker responds with crawled links
@@ -62,10 +74,11 @@ func (f *BasicFetcher) Run() {
 
 	for {
 		url := <-f.inputChannel
-		f.idle = false
+		f.setIdle(false)
 		links, _ := f.fetch(url)
 		f.outputChannel <- &URLMap{URL: url, Links: links}
-		f.idle = true
+		f.setIdle(true)
+
 	}
 }
 

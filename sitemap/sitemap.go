@@ -103,8 +103,12 @@ func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[
 			childLinksString = fmt.Sprintf("%s%s%s\n", childLinksString, baseSep, childURL)
 		}
 	}
+	if strings.Trim(childLinksString, " \n\t") == "" {
+		nodeString = fmt.Sprintf("URL:%s%sLinks: N/A\n", nodeString, baseSep)
 
-	nodeString = fmt.Sprintf("URL:\n%s%s%sLinks:\n%s", baseSep, nodeString, baseSep, childLinksString)
+	} else {
+		nodeString = fmt.Sprintf("URL:%s%sLinks:\n%s", nodeString, baseSep, childLinksString)
+	}
 	return nodeString
 }
 
