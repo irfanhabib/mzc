@@ -65,13 +65,13 @@ func (sm *MapSiteMapImpl) Print() {
 		os.Exit(-1)
 	}
 
-	str := sm._Print(node.(*fetcher.URLMap), 0, make(map[string]bool))
+	str := sm._Print(node.(*fetcher.URLMap), 0, make(map[string]struct{}))
 	sm.siteMapFileWriter.WriteString(str)
 	sm.siteMapFileWriter.Flush()
 
 }
 
-func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[string]bool) string {
+func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[string]struct{}) string {
 
 	nodeString := fmt.Sprintf("%s\n", node.URL)
 	log.Debugf("Processing URL: %s\n", node.URL)
@@ -86,13 +86,13 @@ func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[
 		childNode, ok := sm.linksMap.Load(childURL.String())
 		if ok {
 			// Add all current level children to seen links
-			ignoreURLMap := make(map[string]bool)
+			ignoreURLMap := make(map[string]struct{})
 			for _, childURI := range node.Links {
-				ignoreURLMap[childURI.String()] = true
-				ignoreURLMap[fmt.Sprintf("%s/", childURI.String())] = true
+				ignoreURLMap[childURI.String()] = struct{}{}
+				ignoreURLMap[fmt.Sprintf("%s/", childURI.String())] = struct{}{}
 			}
-			ignoreURLMap[getURL(node.URL)] = true
-			ignoreURLMap[fmt.Sprintf("%s/", getURL(node.URL))] = true
+			ignoreURLMap[getURL(node.URL)] = struct{}{}
+			ignoreURLMap[fmt.Sprintf("%s/", getURL(node.URL))] = struct{}{}
 
 			for k, v := range seenLinks {
 				ignoreURLMap[k] = v
