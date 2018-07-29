@@ -7,7 +7,7 @@ import (
 
 func TestIsExternalLink(t *testing.T) {
 
-	fetchr := &BasicFetcher{baseDomain: "monzo.com"}
+	fetchr := &BasicFetcher{baseDomain: "www.monzo.com"}
 
 	err := testLink("https://itunes.apple.com/gb/app/mondo/id1052238659", true, fetchr)
 	if err != nil {
@@ -24,7 +24,7 @@ func TestIsExternalLink(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = testLink("", true, fetchr)
+	err = testLink("#inpage-ref", true, fetchr)
 	if err != nil {
 		t.Error(err)
 	}
@@ -39,15 +39,15 @@ func TestIsExternalLink(t *testing.T) {
 func TestNormalise(t *testing.T) {
 	fetchr := &BasicFetcher{baseDomain: "monzo.com"}
 
-	normalisedUrl, err := fetchr.normalise("/login", "https://monzo.com/login")
+	normalisedURL, err := fetchr.normalise("/login", "https://monzo.com/login")
 
-	if normalisedUrl != "https://monzo.com/login" || err != nil {
+	if normalisedURL.String() != "https://monzo.com/login" || err != nil {
 		t.Error()
 	}
 
-	normalisedUrl, err = fetchr.normalise("https://www.monzo.com/login", "https://monzo.com")
+	normalisedURL, err = fetchr.normalise("https://www.monzo.com/login", "https://monzo.com")
 
-	if normalisedUrl != "https://www.monzo.com/login" || err != nil {
+	if normalisedURL.String() != "https://www.monzo.com/login" || err != nil {
 		t.Error()
 	}
 }
@@ -71,7 +71,7 @@ func TestRun(t *testing.T) {
 
 func testLink(url string, expectedOutcome bool, fetchr *BasicFetcher) error {
 
-	realOutcome := fetchr.isExternalLink(url)
+	realOutcome := fetchr.isExternalOrInvalidLink(url, "https://www.monzo.com")
 	if realOutcome != expectedOutcome {
 		return fmt.Errorf("Test for %s failed", url)
 	}
