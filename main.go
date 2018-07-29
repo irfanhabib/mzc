@@ -6,6 +6,7 @@ import (
 	"github.com/irfanhabib/mzc/fetcher"
 	"github.com/irfanhabib/mzc/scheduler"
 	"github.com/irfanhabib/mzc/sitemap"
+	"github.com/pkg/profile"
 	log "github.com/sirupsen/logrus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -14,11 +15,12 @@ var (
 	verbose        = kingpin.Flag("verbose", "Verbose mode.").Short('v').Bool()
 	url            = kingpin.Arg("url", "URL to crawl.").Required().String()
 	workers        = kingpin.Flag("workers", "Number of concurrent workers").Short('w').Default("10").Int()
-	outputFileName = kingpin.Flag("output", "Output file name").Short('o').Default("sitemap").String()
+	outputFileName = kingpin.Flag("output", "Output file name").Short('o').Default("sitemap.txt").String()
 )
 
 func main() {
 
+	defer profile.Start().Stop()
 	kingpin.Parse()
 
 	if *verbose {

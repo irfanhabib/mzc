@@ -88,7 +88,7 @@ func (f *BasicFetcher) findLinks(response *http.Response, baseURL string) ([]*ur
 	tokenizedHTMLPage := html.NewTokenizer(response.Body)
 
 	// Store links in map to squash dups
-	linksMap := make(map[string]bool)
+	linksMap := make(map[string]struct{})
 	for {
 		token := tokenizedHTMLPage.Next()
 
@@ -103,8 +103,12 @@ func (f *BasicFetcher) findLinks(response *http.Response, baseURL string) ([]*ur
 			if isAnchor || isLink {
 				for _, a := range tag.Attr {
 					if a.Key == "href" {
-						linksMap[a.Val] = true
-						break
+						link, err := f.normalise(a.Val, baseURL)
+						if err == nil {
+							linksMap[link.String()] = struct{}{}
+							break
+
+						}
 					}
 				}
 			}
@@ -115,11 +119,10 @@ func (f *BasicFetcher) findLinks(response *http.Response, baseURL string) ([]*ur
 	uniqueLinks := make([]*url.URL, len(linksMap))
 	idx := 0
 	for k := range linksMap {
-
 		if !f.isExternalOrInvalidLink(k, baseURL) {
-			normalisedLink, err := f.normalise(k, baseURL)
+			parsedK, err := url.Parse(k)
 			if err == nil {
-				uniqueLinks[idx] = normalisedLink
+				uniqueLinks[idx] = parsedK
 				idx++
 			}
 		}
@@ -148,17 +151,15 @@ func (f *BasicFetcher) normalise(link string, base string) (*url.URL, error) {
 
 func (f *BasicFetcher) isExternalOrInvalidLink(link string, base string) bool {
 
-	// If link is an internal link, exclude from crawling
-	normalisedLink, err := f.normalise(link, base)
+	parsedLink, err := url.Parse(link)
 	if err != nil {
 		return true
 	}
-
-	if normalisedLink.Fragment != "" {
+	if parsedLink.Fragment != "" {
 		return true
 	}
-	if normalisedLink.IsAbs() {
-		if !strings.HasSuffix(normalisedLink.Host, f.baseDomain) {
+	if parsedLink.IsAbs() {
+		if !strings.HasSuffix(parsedLink.Host, f.baseDomain) {
 			return true
 		}
 	}

@@ -77,10 +77,10 @@ func (sched *BasicScheduler) Run() {
 	// Setup workers
 	sched.init()
 
-	// Instantiate go routing for each worker to
+	// Instantiate go routine for each worker to
 	// receive the crawled link and resubmit child links to other workers
 	for i := 0; i < sched.workersCount; i++ {
-		go sched.resubmitWorkToWorkers(i)
+		go sched.workerHandler(i)
 	}
 
 	url := <-sched.mainChannel
@@ -105,7 +105,7 @@ func (sched *BasicScheduler) Run() {
 	}()
 }
 
-func (sched *BasicScheduler) resubmitWorkToWorkers(index int) {
+func (sched *BasicScheduler) workerHandler(index int) {
 
 	for {
 		links := <-sched.workers[index].OutputChannel()
