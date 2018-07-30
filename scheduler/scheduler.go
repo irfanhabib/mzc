@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"math/rand"
 	"net/url"
 	"os"
@@ -10,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/irfanhabib/mzc/fetcher"
+	"github.com/irfanhabib/mzc/robottxt"
 	"github.com/irfanhabib/mzc/sitemap"
 )
 
@@ -22,33 +24,36 @@ type Scheduler interface {
 // BasicScheduler  basic implementation of a scheduler that orchestrates crawling
 // It will randomly send links to crawl to a finite set of workers
 type BasicScheduler struct {
-	workersCount  int
-	workers       []fetcher.Fetcher
-	visitedLinks  sync.Map
-	queueChannel  chan string
-	mainChannel   chan string
-	siteMap       sitemap.SiteMap
-	submittedJobs int
-	rand          *rand.Rand
-	completed     chan bool
-	domain        string
-	scheme        string
+	workersCount    int
+	workers         []fetcher.Fetcher
+	visitedLinks    sync.Map
+	queueChannel    chan string
+	mainChannel     chan string
+	siteMap         sitemap.SiteMap
+	submittedJobs   int
+	rand            *rand.Rand
+	completed       chan bool
+	domain          string
+	scheme          string
+	ignoreRobotsTxt bool
 }
 
 // New instiates a new Scheduler instance
-func New(mainChannel chan string, siteMap sitemap.SiteMap, crawlURL string, workerCount int) Scheduler {
+func New(mainChannel chan string, siteMap sitemap.SiteMap, crawlURL string, workerCount int, ignoreRobotsTxt bool) Scheduler {
 
 	urlStruct, err := url.Parse(crawlURL)
 	if err != nil {
+		log.Errorf("Please specify a valid URL (i.e. https://google.com. Error was %+v", err)
 		os.Exit(-1)
 	}
 	return &BasicScheduler{
-		workersCount: workerCount,
-		mainChannel:  mainChannel,
-		siteMap:      siteMap,
-		completed:    make(chan bool),
-		domain:       urlStruct.Host,
-		scheme:       urlStruct.Scheme,
+		workersCount:    workerCount,
+		mainChannel:     mainChannel,
+		siteMap:         siteMap,
+		completed:       make(chan bool),
+		domain:          urlStruct.Host,
+		scheme:          urlStruct.Scheme,
+		ignoreRobotsTxt: ignoreRobotsTxt,
 	}
 }
 
@@ -58,28 +63,19 @@ func (sched *BasicScheduler) Completed() chan bool {
 	return sched.completed
 }
 func (sched *BasicScheduler) init() {
+
+	var robotsTxt robottxt.RobotsTxt
+	if !sched.ignoreRobotsTxt {
+		robotsTxt = robottxt.New(fmt.Sprintf("%s://%s", sched.scheme, sched.domain))
+	}
+
 	sched.workers = make([]fetcher.Fetcher, sched.workersCount)
 	for i := 0; i < sched.workersCount; i++ {
-		sched.workers[i] = fetcher.New(sched.domain, make(chan string, 10), make(chan *fetcher.URLMap, 10))
+		sched.workers[i] = fetcher.New(sched.domain, make(chan string, 10), make(chan *fetcher.URLMap, 10), robotsTxt)
 		go sched.workers[i].Run()
 	}
 
 	sched.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	// Fetch robots.txt
-	// robotsUrl := fmt.Sprintf("%s://%s/robots.txt", sched.scheme, sched.domain)
-	// response, err := http.Get(robotsUrl)
-	// if err != nil {
-	// 	log.Errorf("Failed to fetched robots.txt from %s due to %+v. Will ignore this and disable handling of robots.txt", robotsUrl, err)
-	// 	// Skip robots.txt handling in case of error
-	// } else {
-	// 	defer response.Body.Close()
-	// 	links, err := f.findLinks(response, url)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return links, nil
-	// }
 
 }
 

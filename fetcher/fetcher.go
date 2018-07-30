@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/irfanhabib/mzc/robottxt"
+
 	"golang.org/x/net/html"
 )
 
@@ -31,15 +33,17 @@ type BasicFetcher struct {
 	outputChannel chan *URLMap
 	idle          bool
 	idleMutex     sync.RWMutex
+	robotsTxt     robottxt.RobotsTxt
 }
 
 // New instantiates a worker
-func New(baseDomain string, inputChannel chan string, outputChannel chan *URLMap) Fetcher {
+func New(baseDomain string, inputChannel chan string, outputChannel chan *URLMap, robotsTxt robottxt.RobotsTxt) Fetcher {
 	return &BasicFetcher{
 		baseDomain:    baseDomain,
 		inputChannel:  inputChannel,
 		outputChannel: outputChannel,
 		idle:          true,
+		robotsTxt:     robotsTxt,
 	}
 }
 
@@ -167,6 +171,12 @@ func (f *BasicFetcher) isExternalOrInvalidLink(link string, base string) bool {
 	parsedLink, err := url.Parse(link)
 	if err != nil {
 		return true
+	}
+
+	if f.robotsTxt != nil {
+		if disallow := f.robotsTxt.IsDisallowed(parsedLink); disallow {
+			return disallow
+		}
 	}
 	if parsedLink.Fragment != "" {
 		return true

@@ -17,6 +17,7 @@ var (
 	workers         = kingpin.Flag("workers", "Number of concurrent workers").Short('w').Default("50").Int()
 	outputFileName  = kingpin.Flag("output", "Output file name").Short('o').Default("sitemap.txt").String()
 	enableProfiling = kingpin.Flag("debug", "Enable CPU profiling").Short('d').Bool()
+	ignoreRobotsTxt = kingpin.Flag("ignore-robots-txt", "Ignore Robots.txt").Default("false").Bool()
 )
 
 func main() {
@@ -42,7 +43,7 @@ func main() {
 	log.Infof("SiteMap Generator running.")
 
 	log.Infof("Instantiating Scheduler...")
-	sched := scheduler.New(mainChannel, siteMap, *url, *workers)
+	sched := scheduler.New(mainChannel, siteMap, *url, *workers, *ignoreRobotsTxt)
 	// `done` channel will prevent premature exiting of program
 	done := sched.Completed()
 	go sched.Run()
