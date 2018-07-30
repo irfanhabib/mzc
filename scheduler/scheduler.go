@@ -27,7 +27,6 @@ type BasicScheduler struct {
 	workersCount    int
 	workers         []fetcher.Fetcher
 	visitedLinks    sync.Map
-	queueChannel    chan string
 	mainChannel     chan string
 	siteMap         sitemap.SiteMap
 	submittedJobs   int

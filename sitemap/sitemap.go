@@ -88,11 +88,9 @@ func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[
 			// Add all current level children to seen links
 			ignoreURLMap := make(map[string]struct{})
 			for _, childURI := range node.Links {
-				ignoreURLMap[childURI.String()] = struct{}{}
-				ignoreURLMap[fmt.Sprintf("%s/", childURI.String())] = struct{}{}
+				addURLToMap(ignoreURLMap, childURI.String())
 			}
-			ignoreURLMap[getURL(node.URL)] = struct{}{}
-			ignoreURLMap[fmt.Sprintf("%s/", getURL(node.URL))] = struct{}{}
+			addURLToMap(ignoreURLMap, getURL(node.URL))
 
 			for k, v := range seenLinks {
 				ignoreURLMap[k] = v
@@ -110,6 +108,11 @@ func (sm *MapSiteMapImpl) _Print(node *fetcher.URLMap, level int, seenLinks map[
 		nodeString = fmt.Sprintf("URL:%s%sLinks:\n%s", nodeString, baseSep, childLinksString)
 	}
 	return nodeString
+}
+
+func addURLToMap(ignoreURLMap map[string]struct{}, URL string) {
+	ignoreURLMap[URL] = struct{}{}
+	ignoreURLMap[fmt.Sprintf("%s/", URL)] = struct{}{}
 }
 
 func getURL(stringURL string) string {

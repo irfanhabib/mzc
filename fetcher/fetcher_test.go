@@ -14,7 +14,7 @@ func TestIsExternalLink(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = testLink("https://web.monzo.com", false, fetchr)
+	err = testLink("https://web.monzo.com", true, fetchr)
 	if err != nil {
 		t.Error(err)
 	}

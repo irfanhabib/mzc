@@ -5,6 +5,7 @@ This is a web crawler written for the monzo take home test.
 `mzc` is a configurable concurrent crawler that produces a Site Map. The Site Map consists of unique child links from a page. 
 
 
+**Usage**
 
 To run `mzc`, execute the following:
 ```
@@ -22,6 +23,7 @@ Flags:
   -w, --workers=50            Number of concurrent workers
   -o, --output="sitemap.txt"  Output file name
   -d, --debug                 Enable CPU profiling
+      --ignore-robots-txt     Ignore Robots.txt
 
 Args:
   <url>  URL to crawl.
@@ -40,6 +42,7 @@ INFO[0005] Time taken: 5.520834449s
 
 Site Map format looks like this:
 ```
+$ cat monzo.txt
 URL:https://www.monzo.com
 	Links:
 	URL:https://www.monzo.com/careers
@@ -61,4 +64,13 @@ URL:https://www.monzo.com
 					URL:https://www.monzo.com/blog/authors/natasha-vernier
 ...
 ```
+**Tests**
 
+To run all tests, execute the following from the root:
+```
+$ go tests ./...
+```
+
+**Architecture**
+
+See [Diagram](docs/architecture.png)
