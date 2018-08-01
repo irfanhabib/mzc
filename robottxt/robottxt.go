@@ -10,15 +10,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// RobotsTxt interface
 type RobotsTxt interface {
 	IsDisallowed(*url.URL) bool
 }
 
+// RobotsTxtImpl implementation of the RobotsTxt interface
 type RobotsTxtImpl struct {
 	URL        string
 	disallowed map[string]struct{}
 }
 
+// New Instantiate new instance of RobotsTxt
 func New(URL string) RobotsTxt {
 	rImpl := &RobotsTxtImpl{
 		URL: URL,
