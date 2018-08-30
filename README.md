@@ -1,6 +1,4 @@
-MZC: The Monzo Take Home test Web Crawler
-
-This is a web crawler written for the monzo take home test.
+MZC: The Web Crawler
 
 `mzc` is a configurable concurrent crawler that produces a Site Map. The Site Map consists of unique child links from a page. 
 
